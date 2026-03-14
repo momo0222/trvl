@@ -121,6 +121,8 @@ export function BudgetPageClient({ tripId, canEdit }: Props) {
   const [showAdd, setShowAdd] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [budgetInput, setBudgetInput] = useState("");
 
   // Add form
   const [cat, setCat] = useState("food");
@@ -200,9 +202,57 @@ export function BudgetPageClient({ tripId, canEdit }: Props) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="card p-5">
           <p className="font-mono text-xs text-sand-400 uppercase tracking-wide mb-1">Budget</p>
-          <p className="font-display text-2xl font-bold text-sand-900">
-            {currency} {tripBudget.toLocaleString()}
-          </p>
+          {editingBudget ? (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const val = parseFloat(budgetInput);
+                if (isNaN(val) || val < 0) return;
+                await fetch(`/api/trips/${tripId}`, {
+                  method: "PATCH",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ total_budget: val }),
+                });
+                setTripBudget(val);
+                setEditingBudget(false);
+              }}
+              className="flex items-baseline gap-1"
+            >
+              <span className="font-display text-2xl font-bold text-sand-900">{currency}</span>
+              <input
+                type="number"
+                step="0.01"
+                value={budgetInput}
+                onChange={(e) => setBudgetInput(e.target.value)}
+                onBlur={async () => {
+                  const val = parseFloat(budgetInput);
+                  if (isNaN(val) || val < 0) { setEditingBudget(false); return; }
+                  await fetch(`/api/trips/${tripId}`, {
+                    method: "PATCH",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ total_budget: val }),
+                  });
+                  setTripBudget(val);
+                  setEditingBudget(false);
+                }}
+                onKeyDown={(e) => { if (e.key === "Escape") setEditingBudget(false); }}
+                className="font-display text-2xl font-bold text-sand-900 bg-transparent border-b-2 border-ocean outline-none w-28 appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                autoFocus
+              />
+            </form>
+          ) : (
+            <p
+              className={`font-display text-2xl font-bold text-sand-900 ${canEdit ? "cursor-pointer group" : ""}`}
+              onClick={() => {
+                if (!canEdit) return;
+                setBudgetInput(String(tripBudget));
+                setEditingBudget(true);
+              }}
+            >
+              {currency} {tripBudget.toLocaleString()}
+              {canEdit && <span className="inline-block ml-1.5 text-sand-300 opacity-0 group-hover:opacity-100 transition-opacity text-sm">✎</span>}
+            </p>
+          )}
         </div>
         <div className="card p-5">
           <p className="font-mono text-xs text-sand-400 uppercase tracking-wide mb-1">Spent</p>

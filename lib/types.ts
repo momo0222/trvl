@@ -129,3 +129,17 @@ export const STATUS_CONFIG: Record<ItemStatus, { bgClass: string; textClass: str
   suggestion:{ bgClass: "bg-amber-50",    textClass: "text-amber-700",   label: "Suggestion" },
   cancelled: { bgClass: "bg-gray-100",    textClass: "text-gray-500",    label: "Cancelled" },
 };
+
+export interface FlightOffer {
+  id: string;
+  airline: string;
+  flightNumber: string;
+  origin: string;
+  destination: string;
+  departTime: string;
+  arriveTime: string;
+  duration: string;
+  stops: number;
+  price: number;
+  currency: string;
+}
