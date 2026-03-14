@@ -2,14 +2,15 @@ import { Navbar } from "@/components/layout/Navbar";
 import { TripSidebar } from "@/components/layout/TripSidebar";
 
 interface Props {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // TODO: Fetch trip members + shared links
 // const { data: members } = await supabase.from('trip_members').select('*, profile:profiles(*)').eq('trip_id', params.id)
 // const { data: links } = await supabase.from('shared_links').select('*').eq('trip_id', params.id)
 
-export default function TripSharePage({ params }: Props) {
+export default async function TripSharePage({ params: paramsPromise }: Props) {
+  const params = await paramsPromise;
   return (
     <>
       <Navbar />

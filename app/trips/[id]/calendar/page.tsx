@@ -2,7 +2,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { TripSidebar } from "@/components/layout/TripSidebar";
 
 interface Props {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // TODO: Fetch days + items for calendar grid
@@ -11,7 +11,8 @@ interface Props {
 //   .eq('trip_id', params.id)
 //   .order('date')
 
-export default function TripCalendarPage({ params }: Props) {
+export default async function TripCalendarPage({ params: paramsPromise }: Props) {
+  const params = await paramsPromise;
   return (
     <>
       <Navbar />

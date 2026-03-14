@@ -65,7 +65,17 @@ export async function askAIJSON<T>(req: AIRequest): Promise<T> {
   })
 
   const text = response.choices?.[0]?.message?.content ?? "{}"
-  return JSON.parse(text) as T
+  const finishReason = response.choices?.[0]?.finish_reason
+
+  try {
+    return JSON.parse(text) as T
+  } catch (e) {
+    if (finishReason === "length") {
+      throw new Error("AI response was truncated (token limit reached). Try a shorter trip or fewer details.")
+    }
+    console.error("AI JSON parse failed:", text.slice(-200))
+    throw new Error("AI returned invalid JSON")
+  }
 }
 
 /*

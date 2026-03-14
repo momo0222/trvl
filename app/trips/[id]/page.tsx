@@ -1,8 +1,13 @@
 import { Navbar } from "@/components/layout/Navbar";
 import { TripSidebar } from "@/components/layout/TripSidebar";
+import { ItineraryView } from "@/components/trip/ItineraryView";
+import { createServerSupabase } from "@/lib/supabase-server";
+import { createAdminSupabase } from "@/lib/supabase-admin";
+
+export const dynamic = "force-dynamic";
 
 interface Props {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // TODO: Fetch trip data
@@ -12,7 +17,43 @@ interface Props {
 //   .eq('id', params.id)
 //   .single()
 
-export default function TripItineraryPage({ params }: Props) {
+export default async function TripItineraryPage({ params: paramsPromise }: Props) {
+  const params = await paramsPromise;
+  const supabase = await createServerSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return (
+      <>
+        <Navbar />
+        <div className="max-w-3xl mx-auto px-6 py-10">
+          <div className="card p-6 text-sand-400 text-sm">Please sign in.</div>
+        </div>
+      </>
+    );
+  }
+
+  const admin = createAdminSupabase();
+  const { data: trip, error } = await admin
+    .from("trips")
+    .select("*, days(*, items:itinerary_items(*))")
+    .eq("id", params.id)
+    .order("date", { referencedTable: "days", ascending: true })
+    .single();
+
+  if (error || !trip) {
+    return (
+      <>
+        <Navbar />
+        <div className="max-w-3xl mx-auto px-6 py-10">
+          <div className="card p-6 text-sand-400 text-sm">Trip not found.</div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <Navbar />
@@ -20,24 +61,11 @@ export default function TripItineraryPage({ params }: Props) {
         <TripSidebar tripId={params.id} activeTab="itinerary" />
         <main className="flex-1 max-w-3xl mx-auto px-6 py-8">
           <h1 className="font-display text-3xl font-bold text-sand-900 mb-2">
-            Trip Itinerary
+            {trip.name}
           </h1>
-          <p className="text-sand-400 text-sm mb-8">
-            Trip ID: {params.id}
-          </p>
+          <p className="text-sand-400 text-sm mb-8">{trip.destination}</p>
 
-          {/* Day tabs — Person 1 builds this */}
-          <div className="flex gap-2 overflow-x-auto pb-2 mb-6">
-            {/* <DayTabs days={trip.days} /> */}
-          </div>
-
-          {/* Itinerary items — Person 1 builds this */}
-          <div className="flex flex-col gap-3">
-            {/* <ItineraryItem /> cards go here */}
-            <button className="w-full py-4 rounded-2xl border-2 border-dashed border-sand-200 text-sand-400 text-sm font-medium hover:border-ocean hover:text-ocean transition-colors">
-              + Add flight, hotel, activity, or restaurant
-            </button>
-          </div>
+          <ItineraryView trip={trip as any} />
         </main>
       </div>
     </>

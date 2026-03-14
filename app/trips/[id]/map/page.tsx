@@ -2,7 +2,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { TripSidebar } from "@/components/layout/TripSidebar";
 
 interface Props {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // TODO: Fetch itinerary items with lat/lng for map pins + route
@@ -13,7 +13,8 @@ interface Props {
 //   .not('latitude', 'is', null)
 //   .order('sort_order')
 
-export default function TripMapPage({ params }: Props) {
+export default async function TripMapPage({ params: paramsPromise }: Props) {
+  const params = await paramsPromise;
   return (
     <>
       <Navbar />

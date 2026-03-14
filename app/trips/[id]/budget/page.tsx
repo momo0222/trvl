@@ -2,14 +2,15 @@ import { Navbar } from "@/components/layout/Navbar";
 import { TripSidebar } from "@/components/layout/TripSidebar";
 
 interface Props {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 // TODO: Fetch expenses + trip budget
 // const { data: trip } = await supabase.from('trips').select('total_budget, currency').eq('id', params.id).single()
 // const { data: expenses } = await supabase.from('expenses').select('*').eq('trip_id', params.id)
 
-export default function TripBudgetPage({ params }: Props) {
+export default async function TripBudgetPage({ params: paramsPromise }: Props) {
+  const params = await paramsPromise;
   return (
     <>
       <Navbar />

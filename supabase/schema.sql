@@ -152,80 +152,117 @@ alter table public.itinerary_items enable row level security;
 alter table public.expenses enable row level security;
 alter table public.shared_links enable row level security;
 
+-- Helper functions to avoid policy recursion (trips <-> trip_members)
+create or replace function public.is_trip_owner(trip uuid, uid uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists(
+    select 1
+    from public.trips t
+    where t.id = trip
+      and t.owner_id = uid
+  );
+$$;
+
+create or replace function public.is_trip_member(trip uuid, uid uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists(
+    select 1
+    from public.trip_members tm
+    where tm.trip_id = trip
+      and tm.user_id = uid
+  );
+$$;
+
+create or replace function public.can_edit_trip(trip uuid, uid uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select public.is_trip_owner(trip, uid)
+  or exists(
+    select 1
+    from public.trip_members tm
+    where tm.trip_id = trip
+      and tm.user_id = uid
+      and tm.role in ('owner','editor')
+  );
+$$;
+
 -- Profiles: users can read any profile, update own
+drop policy if exists "Profiles: read all" on public.profiles;
+drop policy if exists "Profiles: update own" on public.profiles;
 create policy "Profiles: read all" on public.profiles for select using (true);
 create policy "Profiles: update own" on public.profiles for update using (auth.uid() = id);
 
 -- Trips: members can read, owner can do everything
+drop policy if exists "Trips: members can read" on public.trips;
+drop policy if exists "Trips: owner can insert" on public.trips;
+drop policy if exists "Trips: owner can update" on public.trips;
+drop policy if exists "Trips: owner can delete" on public.trips;
 create policy "Trips: members can read" on public.trips for select
-  using (
-    owner_id = auth.uid() or
-    id in (select trip_id from public.trip_members where user_id = auth.uid())
-  );
+  using (public.is_trip_owner(id, auth.uid()) or public.is_trip_member(id, auth.uid()));
 create policy "Trips: owner can insert" on public.trips for insert with check (owner_id = auth.uid());
-create policy "Trips: owner can update" on public.trips for update using (owner_id = auth.uid());
-create policy "Trips: owner can delete" on public.trips for delete using (owner_id = auth.uid());
+create policy "Trips: owner can update" on public.trips for update using (public.is_trip_owner(id, auth.uid()));
+create policy "Trips: owner can delete" on public.trips for delete using (public.is_trip_owner(id, auth.uid()));
 
 -- Trip members: trip members can read, owner/editors can manage
+drop policy if exists "Members: members can read" on public.trip_members;
+drop policy if exists "Members: owner can manage" on public.trip_members;
 create policy "Members: members can read" on public.trip_members for select
-  using (
-    trip_id in (select trip_id from public.trip_members where user_id = auth.uid())
-    or trip_id in (select id from public.trips where owner_id = auth.uid())
-  );
+  using (public.is_trip_member(trip_id, auth.uid()) or public.is_trip_owner(trip_id, auth.uid()) or user_id = auth.uid());
 create policy "Members: owner can manage" on public.trip_members for all
-  using (trip_id in (select id from public.trips where owner_id = auth.uid()));
+  using (public.can_edit_trip(trip_id, auth.uid()));
 
 -- Days: trip members can read, editors+ can write
+drop policy if exists "Days: members can read" on public.days;
+drop policy if exists "Days: editors can manage" on public.days;
 create policy "Days: members can read" on public.days for select
-  using (trip_id in (
-    select trip_id from public.trip_members where user_id = auth.uid()
-    union select id from public.trips where owner_id = auth.uid()
-  ));
+  using (public.is_trip_owner(trip_id, auth.uid()) or public.is_trip_member(trip_id, auth.uid()));
 create policy "Days: editors can manage" on public.days for all
-  using (trip_id in (
-    select trip_id from public.trip_members where user_id = auth.uid() and role in ('owner','editor')
-    union select id from public.trips where owner_id = auth.uid()
-  ));
+  using (public.can_edit_trip(trip_id, auth.uid()));
 
 -- Itinerary items: same pattern
+drop policy if exists "Items: members can read" on public.itinerary_items;
+drop policy if exists "Items: editors can manage" on public.itinerary_items;
 create policy "Items: members can read" on public.itinerary_items for select
-  using (trip_id in (
-    select trip_id from public.trip_members where user_id = auth.uid()
-    union select id from public.trips where owner_id = auth.uid()
-  ));
+  using (public.is_trip_owner(trip_id, auth.uid()) or public.is_trip_member(trip_id, auth.uid()));
 create policy "Items: editors can manage" on public.itinerary_items for all
-  using (trip_id in (
-    select trip_id from public.trip_members where user_id = auth.uid() and role in ('owner','editor')
-    union select id from public.trips where owner_id = auth.uid()
-  ));
+  using (public.can_edit_trip(trip_id, auth.uid()));
 
 -- Expenses: same pattern
+drop policy if exists "Expenses: members can read" on public.expenses;
+drop policy if exists "Expenses: editors can manage" on public.expenses;
 create policy "Expenses: members can read" on public.expenses for select
-  using (trip_id in (
-    select trip_id from public.trip_members where user_id = auth.uid()
-    union select id from public.trips where owner_id = auth.uid()
-  ));
+  using (public.is_trip_owner(trip_id, auth.uid()) or public.is_trip_member(trip_id, auth.uid()));
 create policy "Expenses: editors can manage" on public.expenses for all
-  using (trip_id in (
-    select trip_id from public.trip_members where user_id = auth.uid() and role in ('owner','editor')
-    union select id from public.trips where owner_id = auth.uid()
-  ));
+  using (public.can_edit_trip(trip_id, auth.uid()));
 
 -- Shared links: owner can manage
+drop policy if exists "Links: anyone can read by slug" on public.shared_links;
+drop policy if exists "Links: owner can manage" on public.shared_links;
 create policy "Links: anyone can read by slug" on public.shared_links for select using (true);
 create policy "Links: owner can manage" on public.shared_links for all
-  using (trip_id in (select id from public.trips where owner_id = auth.uid()));
+  using (public.is_trip_owner(trip_id, auth.uid()));
 
 -- ============================================
 -- INDEXES
 -- ============================================
-create index idx_trip_members_user on public.trip_members(user_id);
-create index idx_trip_members_trip on public.trip_members(trip_id);
-create index idx_days_trip on public.days(trip_id);
-create index idx_items_day on public.itinerary_items(day_id);
-create index idx_items_trip on public.itinerary_items(trip_id);
-create index idx_expenses_trip on public.expenses(trip_id);
-create index idx_shared_links_slug on public.shared_links(slug);
+create index if not exists idx_trip_members_user on public.trip_members(user_id);
+create index if not exists idx_trip_members_trip on public.trip_members(trip_id);
+create index if not exists idx_days_trip on public.days(trip_id);
+create index if not exists idx_items_day on public.itinerary_items(day_id);
+create index if not exists idx_items_trip on public.itinerary_items(trip_id);
+create index if not exists idx_expenses_trip on public.expenses(trip_id);
+create index if not exists idx_shared_links_slug on public.shared_links(slug);
 
 -- ============================================
 -- REAL-TIME (enable for collaborative editing)
